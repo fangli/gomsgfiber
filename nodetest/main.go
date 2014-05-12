@@ -92,7 +92,7 @@ func (c *Tester) Run() ([]Result, error) {
 	close(resultChn)
 
 	if len(result) == 0 {
-		return nil, errors.New("No valid candidate servers found")
+		return nil, errors.New("All msgfiber servers are down!")
 	}
 
 	return result, nil

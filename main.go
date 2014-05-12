@@ -21,33 +21,14 @@
 package main
 
 import (
-	"net"
-
 	"github.com/fangli/gomsgfiber/parsecfg"
 	"github.com/fangli/gomsgfiber/processor"
 )
 
-// gomsgfiber Client package
-
-type NodeConn struct {
-	Name string
-	Conn net.Conn
-}
-
-type Client struct {
-	Nodes    []string
-	Channels []string
-	Psk      []byte
-}
-
-var config parsecfg.Config
-
 // Main
 
 func main() {
-
-	config = parsecfg.Parse()
-
+	config := parsecfg.Parse()
 	p := processor.Processor{
 		Config: config,
 	}

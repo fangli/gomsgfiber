@@ -22,7 +22,6 @@ package logging
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -62,7 +61,6 @@ type Log struct {
 
 func (l *Log) write(level int, msg string) {
 	var err error
-	log.Println("Printing...")
 	if l.Level > level {
 		return
 	}
@@ -82,7 +80,6 @@ func (l *Log) write(level int, msg string) {
 	if (l.Dest == 1) || (l.Dest == 2) {
 		l.f, err = os.OpenFile(l.FileName, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 		if err != nil {
-			log.Println(err.Error())
 			return
 		}
 		defer l.f.Close()
@@ -108,5 +105,6 @@ func (l *Log) Error(msg string) {
 
 func (l *Log) Fatal(msg string) {
 	l.write(FATAL, msg)
+	l.write(FATAL, "Exited with return code 1.")
 	os.Exit(1)
 }

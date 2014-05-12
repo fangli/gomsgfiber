@@ -21,13 +21,7 @@
 package executer
 
 import (
-	"errors"
-	"io/ioutil"
-	"log"
-	"os"
-	"os/exec"
-	"strings"
-
+	"github.com/fangli/gomsgfiber/executer/singleton"
 	"github.com/fangli/gomsgfiber/logging"
 	"github.com/fangli/gomsgfiber/parsecfg"
 	"github.com/fangli/gomsgfiber/recorder"
@@ -38,102 +32,21 @@ type Msg struct {
 	Message []byte
 }
 
-func mkdirs(path string) error {
-	f, err := os.Stat(path)
-	if err != nil {
-		if os.MkdirAll(path, os.ModePerm) != nil {
-			return errors.New("Unable to initialize dir: " + path)
-		}
-	}
-
-	f, err = os.Stat(path)
-	if !f.IsDir() {
-		return errors.New(path + " must be a directory")
-	}
-	return nil
-}
-
-func initialDataDir(datadir string) error {
-	var err error
-	if err = mkdirs(datadir); err != nil {
-		return err
-	}
-	if err = mkdirs(datadir + "/logs"); err != nil {
-		return err
-	}
-	if err = mkdirs(datadir + "/.caches"); err != nil {
-		return err
-	}
-	return nil
-}
-
-func createTmpFile(prefix string, data []byte) (string, error) {
-	f, err := ioutil.TempFile("", prefix+"-")
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	_, err = f.Write(data)
-	if err != nil {
-		return "", err
-	}
-	return f.Name(), nil
-}
-
-type SingletonProcessor struct {
-	Name     string
-	Retries  int64
-	Command  string
-	MsgChann chan []byte
-	Logger   *logging.Log
-	Recorder *recorder.Record
-}
-
-func (s *SingletonProcessor) ExecuteCommand(msg []byte) ([]byte, error) {
-	fname, err := createTmpFile(s.Name, msg)
-	if err != nil {
-		log.Fatal("Unable creating temp file: " + err.Error())
-	}
-	command := strings.Replace(s.Command, "%channel%", s.Name, -1)
-	command = strings.Replace(command, "%file%", fname, -1)
-
-	out, err := exec.Command("sh", "-c", command).CombinedOutput()
-	if err != nil {
-		return []byte(""), err
-	}
-	return out, nil
-}
-
-func (s *SingletonProcessor) Run() {
-	for body := range s.MsgChann {
-		if !s.Recorder.Equal(s.Name, body) {
-			output, err := s.ExecuteCommand(body)
-			if err != nil {
-				s.Logger.Error(err.Error())
-			} else {
-				s.Logger.Info(string(output))
-				s.Recorder.Set(s.Name, body)
-			}
-		}
-	}
-}
-
-func Run(config parsecfg.Config, msgChann *chan Msg) {
-	err := initialDataDir(config.Main.Data_Path)
-	if err != nil {
-		config.AppLog.Fatal(err.Error())
-	}
-
-	pool := make(map[string]*SingletonProcessor)
+func Run(config *parsecfg.Config, msgChann *chan Msg) {
+	// Make a cache query instance
 	recorder := recorder.Record{config.Main.Data_Path + "/.caches"}
+
+	// Pool contains different message channel
+	pool := make(map[string]*singleton.SingletonProcessor)
 
 	for chnName, chnConfig := range config.Channel.Channels {
 
-		pool[chnName] = &SingletonProcessor{
-			Name:     chnName,
-			Retries:  chnConfig.Retry_Times,
-			Command:  chnConfig.Command,
-			MsgChann: make(chan []byte, config.Main.Queue_Size),
+		pool[chnName] = &singleton.SingletonProcessor{
+			Name:       chnName,
+			Retries:    chnConfig.Retry_Times,
+			RetryDelay: chnConfig.Retry_Delay,
+			Command:    chnConfig.Command,
+			MsgChann:   make(chan []byte, config.Main.Queue_Size),
 			Logger: &logging.Log{
 				Dest:     1,
 				Level:    config.Main.Log_Level,

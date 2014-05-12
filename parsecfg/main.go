@@ -21,6 +21,7 @@
 package parsecfg
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -38,6 +39,17 @@ var SYS_VER string
 var SYS_BUILD_VER string
 var SYS_BUILD_DATE string
 
+type ChannelStruct struct {
+	Command         string
+	Retry_Times     int
+	Raw_Retry_Delay string        `gcfg:"retry-delay"`
+	Retry_Delay     time.Duration `gcfg:"raw-retry-delay"`
+}
+
+type ChannelsMap struct {
+	Channel map[string]*ChannelStruct
+}
+
 type Config struct {
 	Main struct {
 		Data_Path     string
@@ -54,81 +66,146 @@ type Config struct {
 	}
 	Channel struct {
 		Include      string
-		Channels     map[string]*dryChannel
+		Channels     map[string]*ChannelStruct
 		Channel_List []string
 	}
 	AppLog *logging.Log
 }
 
-type dryChannel struct {
-	Command     string
-	Retry_Times int64
-}
-
-type rawChannelConfig struct {
-	Channel map[string]*dryChannel
-}
-
-func Parse() Config {
-	configFile := flag.String("config", "/etc/msgclient/msgclient.conf", "The primary configuration file")
-	version := flag.Bool("version", false, "Show version information")
-	v := flag.Bool("v", false, "Show version information")
-
-	flag.Parse()
-
-	if *version || *v {
-		fmt.Println("Msgclient: A client of msgfiber")
-		fmt.Println("Version", SYS_VER)
-		fmt.Println("Build", SYS_BUILD_VER)
-		fmt.Println("Compile at", SYS_BUILD_DATE)
-		os.Exit(0)
-	}
-
-	var config Config
-	err := gcfg.ReadFileInto(&config, *configFile)
+func mkdirs(path string) error {
+	f, err := os.Stat(path)
 	if err != nil {
-		log.Fatalf("Failed to parse config data: %s", err)
-	}
-
-	channelFileList, err := filepath.Glob(config.Channel.Include)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	if channelFileList == nil {
-		log.Fatal("No channels subscribed, please check the configuration folder ", config.Channel.Include)
-	}
-
-	channelConfig := make(map[string]*dryChannel)
-
-	for _, fname := range channelFileList {
-		var _rawChannels rawChannelConfig
-		err = gcfg.ReadFileInto(&_rawChannels, fname)
-		if err == nil {
-			for name, chann := range _rawChannels.Channel {
-				channelConfig[name] = &dryChannel{}
-				channelConfig[name].Command = chann.Command
-				channelConfig[name].Retry_Times = chann.Retry_Times
-			}
+		if os.MkdirAll(path, os.ModePerm) != nil {
+			return errors.New("Unable to initialize dir: " + path)
 		}
 	}
 
-	for chname, _ := range channelConfig {
+	f, err = os.Stat(path)
+	if !f.IsDir() {
+		return errors.New(path + " must be a directory")
+	}
+	return nil
+}
+
+func initialDataDir(datadir string) error {
+
+	// Initial all folders
+	var err error
+	if err = mkdirs(datadir); err != nil {
+		return err
+	}
+	if err = mkdirs(datadir + "/logs"); err != nil {
+		return err
+	}
+	if err = mkdirs(datadir + "/.caches"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func showVersion() {
+	fmt.Println("Msgclient: A client of msgfiber")
+	fmt.Println("Version", SYS_VER)
+	fmt.Println("Build", SYS_BUILD_VER)
+	fmt.Println("Compile at", SYS_BUILD_DATE)
+	os.Exit(0)
+}
+
+func getConfigPath() string {
+	configPath := flag.String("config", "/etc/msgclient/msgclient.conf", "The primary configuration file")
+	version := flag.Bool("version", false, "Show version information")
+	v := flag.Bool("v", false, "Show version information")
+	flag.Parse()
+
+	if *version || *v {
+		showVersion()
+	}
+	return *configPath
+}
+
+func initialDefault() *Config {
+	config := new(Config)
+	config.Main.Data_Path = "/var/lib/msgclient"
+	config.Main.Queue_Size = 100
+	config.Main.Raw_Log_Level = "INFO"
+	config.Main.Log_Level = logging.INFO
+	config.Client.Raw_Nodes = "localhost:3264"
+	config.Client.Nodes = []string{"localhost:3264"}
+	config.Client.Psk = ""
+	config.Client.Raw_Ping_Interval = "1s"
+	config.Client.Ping_Interval = time.Second
+	config.Channel.Include = "/etc/msgclient/conf.d"
+	return config
+}
+
+func getChannels(flist []string) *map[string]*ChannelStruct {
+	var err error
+	ret := make(map[string]*ChannelStruct)
+
+	for _, fname := range flist {
+		var _rawChannels ChannelsMap
+		err = gcfg.ReadFileInto(&_rawChannels, fname)
+		if err != nil {
+			log.Fatalf("Cann't load channel config from %s", fname)
+		}
+		for name, chann := range _rawChannels.Channel {
+			ret[name] = &ChannelStruct{}
+			ret[name].Command = chann.Command
+			ret[name].Retry_Times = chann.Retry_Times
+
+			if chann.Raw_Retry_Delay == "" {
+				ret[name].Retry_Delay = time.Duration(0)
+			} else {
+				ret[name].Retry_Delay, err = time.ParseDuration(chann.Raw_Retry_Delay)
+				if err != nil {
+					log.Fatalf("Unable to parse config retry-delay in file %s!", fname)
+				}
+			}
+		}
+	}
+	return &ret
+}
+
+func Parse() *Config {
+
+	configPath := getConfigPath()
+
+	config := initialDefault()
+	err := gcfg.ReadFileInto(config, configPath)
+	if err != nil {
+		log.Fatalf("Failed to read config from %s, Reason: %s", configPath, err)
+	}
+
+	subConfigfiles, err := filepath.Glob(config.Channel.Include)
+	if err != nil {
+		log.Fatalf("Unable reading channel config files by %s, Reason: %s", config.Channel.Include, err)
+	}
+	if subConfigfiles == nil {
+		log.Fatalf("No channel config file found at %s, you must subscribe at least one channel!", config.Channel.Include)
+	}
+
+	channelConfig := getChannels(subConfigfiles)
+
+	for chname, _ := range *channelConfig {
 		config.Channel.Channel_List = append(config.Channel.Channel_List, chname)
 	}
 
-	config.Channel.Channels = channelConfig
+	config.Channel.Channels = *channelConfig
 	config.Client.Nodes = strings.Split(config.Client.Raw_Nodes, ",")
 
 	syncDuration, err := time.ParseDuration(config.Client.Raw_Ping_Interval)
 	if err != nil {
-		log.Fatal("Config ping-interval is not acceptable: ", config.Client.Raw_Ping_Interval)
+		log.Fatalf("Config ping-interval is not acceptable")
 	}
 	config.Client.Ping_Interval = syncDuration
 
 	config.Main.Data_Path = strings.TrimRight(config.Main.Data_Path, "/")
-
 	config.Main.Log_Level = logging.LevelInt[strings.ToUpper(config.Main.Raw_Log_Level)]
+
+	err = initialDataDir(config.Main.Data_Path)
+	if err != nil {
+		log.Fatalf("Unable initializing data dir: " + config.Main.Data_Path + " (" + err.Error() + ")")
+	}
 
 	config.AppLog = &logging.Log{
 		Dest:     logging.FILE,
