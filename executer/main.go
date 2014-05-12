@@ -33,6 +33,7 @@ type Msg struct {
 }
 
 func Run(config *parsecfg.Config, msgChann *chan Msg) {
+	var msg Msg
 	// Make a cache query instance
 	recorder := recorder.Record{config.Main.Data_Path + "/.caches"}
 
@@ -58,7 +59,7 @@ func Run(config *parsecfg.Config, msgChann *chan Msg) {
 		go pool[chnName].Run()
 	}
 
-	for msg := range *msgChann {
+	for msg = range *msgChann {
 		pool[msg.Channel].MsgChann <- msg.Message
 	}
 }

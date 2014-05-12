@@ -91,10 +91,11 @@ func (s *SingletonProcessor) ExecuteCommand(msg []byte) ([]byte, error) {
 }
 
 func (s *SingletonProcessor) Run() {
+	var err error
 	for body := range s.MsgChann {
 		if !s.Recorder.Equal(s.Name, body) {
 			s.Logger.Info("Received new command from server, creating subtask...")
-			_, err := s.ExecuteCommand(body)
+			_, err = s.ExecuteCommand(body)
 			if err != nil {
 				s.Logger.Error("An error occured when running command. " + err.Error())
 			} else {

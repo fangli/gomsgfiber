@@ -51,6 +51,8 @@ func (m *Manager) Subscribe() error {
 }
 
 func (m *Manager) Heartbeat() {
+	var err error
+
 	pingStruct := make(map[string]interface{})
 	pingStruct["Op"] = "p"
 	pingPacket, _ := msgpack.Marshal(pingStruct)
@@ -58,7 +60,7 @@ func (m *Manager) Heartbeat() {
 	for {
 		time.Sleep(m.PingInterval)
 		m.Conn.SetWriteDeadline(time.Now().Add(time.Second * 3))
-		_, err := m.Conn.Write(pingPacket)
+		_, err = m.Conn.Write(pingPacket)
 		if err != nil {
 			return
 		}
