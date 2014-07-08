@@ -56,8 +56,11 @@ type Config struct {
 		Queue_Size    int64
 		Raw_Log_Level string `gcfg:"log-level"`
 		Log_Level     int    `gcfg:"raw-log-level"`
+		Report_Url    string `gcfg:"report-url"`
 	}
 	Client struct {
+		Name              string `gcfg:"name"`
+		Instance_Id       string `gcfg:"instance-id"`
 		Raw_Nodes         string `gcfg:"msgfiber-nodes"`
 		Nodes             []string
 		Psk               string
@@ -129,6 +132,9 @@ func initialDefault() *Config {
 	config.Main.Queue_Size = 100
 	config.Main.Raw_Log_Level = "INFO"
 	config.Main.Log_Level = logging.INFO
+	config.Main.Report_Url = "http://localhost/status_callback.php"
+	config.Client.Name = "N/A"
+	config.Client.Instance_Id = "i-000000"
 	config.Client.Raw_Nodes = "localhost:3264"
 	config.Client.Nodes = []string{"localhost:3264"}
 	config.Client.Psk = ""

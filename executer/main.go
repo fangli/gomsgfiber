@@ -35,7 +35,6 @@ type Msg struct {
 func Run(config *parsecfg.Config, msgChann *chan Msg) {
 	var msg Msg
 	// Make a cache query instance
-	recorder := recorder.Record{config.Main.Data_Path + "/.caches"}
 
 	// Pool contains different message channel
 	pool := make(map[string]*singleton.SingletonProcessor)
@@ -43,17 +42,20 @@ func Run(config *parsecfg.Config, msgChann *chan Msg) {
 	for chnName, chnConfig := range config.Channel.Channels {
 
 		pool[chnName] = &singleton.SingletonProcessor{
-			Name:       chnName,
-			Retries:    chnConfig.Retry_Times,
-			RetryDelay: chnConfig.Retry_Delay,
-			Command:    chnConfig.Command,
-			MsgChann:   make(chan []byte, config.Main.Queue_Size),
+			ChnName:      chnName,
+			Retries:      chnConfig.Retry_Times,
+			RetryDelay:   chnConfig.Retry_Delay,
+			Command:      chnConfig.Command,
+			MsgChann:     make(chan []byte, config.Main.Queue_Size),
+			ReportUrl:    config.Main.Report_Url,
+			InstanceName: config.Client.Name,
+			InstanceId:   config.Client.Instance_Id,
+			Recorder:     &recorder.Record{config.Main.Data_Path + "/.caches/" + chnName},
 			Logger: &logging.Log{
 				Dest:     1,
 				Level:    config.Main.Log_Level,
 				FileName: config.Main.Data_Path + "/logs/" + chnName + ".log",
 			},
-			Recorder: &recorder,
 		}
 
 		go pool[chnName].Run()

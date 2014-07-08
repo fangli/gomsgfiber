@@ -22,35 +22,105 @@ package recorder
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"os"
 )
 
 type Record struct {
-	CachePath string
+	CacheFile string
 }
 
-func (r *Record) Get(name string) []byte {
-	var fname = r.CachePath + "/" + name
-	_, err := os.Stat(fname)
+type Msgbody struct {
+	Id            int64             `json:"id"`
+	Timestamp     int64             `json:"timestamp"`
+	ScriptContent []byte            `json:"script_content"`
+	Env           map[string]string `json:"env"`
+	Meta          []byte            `json:"meta"`
+	Comment       []byte            `json:"comment"`
+}
+
+func (r *Record) GetRaw() []byte {
+	_, err := os.Stat(r.CacheFile)
 	if err != nil {
 		return []byte("")
 	}
-	msg, err := ioutil.ReadFile(fname)
+	msg, err := ioutil.ReadFile(r.CacheFile)
 	if err != nil {
 		return []byte("")
 	}
 	return msg
 }
 
-func (r *Record) Set(name string, data []byte) error {
-	var fname = r.CachePath + "/" + name
-	return ioutil.WriteFile(fname, data, os.ModePerm)
+func (r *Record) Set(data []byte) error {
+	return ioutil.WriteFile(r.CacheFile, data, os.ModePerm)
 }
 
-func (r *Record) Equal(name string, data []byte) bool {
-	if bytes.Equal(data, r.Get(name)) {
+func (r *Record) Equal(data []byte) bool {
+	if bytes.Equal(data, r.GetRaw()) {
 		return true
 	}
 	return false
+}
+
+func (r *Record) Get() (Msgbody, error) {
+	var dat Msgbody
+	var byt = r.GetRaw()
+	if len(byt) == 0 {
+		return dat, errors.New("Cache not set")
+	}
+	err := json.Unmarshal(r.GetRaw(), &dat)
+	if err != nil {
+		return dat, err
+	}
+	return dat, nil
+}
+
+func (r *Record) GetReleaseId() int64 {
+	dat, err := r.Get()
+	if err != nil {
+		return 0
+	}
+	return dat.Id
+}
+
+func (r *Record) GetTimestamp() (int64, error) {
+	dat, err := r.Get()
+	if err != nil {
+		return 0, err
+	}
+	return dat.Timestamp, nil
+}
+
+func (r *Record) GetScriptContent() ([]byte, error) {
+	dat, err := r.Get()
+	if err != nil {
+		return nil, err
+	}
+	return dat.ScriptContent, nil
+}
+
+func (r *Record) GetEnv() (map[string]string, error) {
+	dat, err := r.Get()
+	if err != nil {
+		return nil, err
+	}
+	return dat.Env, nil
+}
+
+func (r *Record) GetMeta() ([]byte, error) {
+	dat, err := r.Get()
+	if err != nil {
+		return nil, err
+	}
+	return dat.Meta, nil
+}
+
+func (r *Record) GetComment() ([]byte, error) {
+	dat, err := r.Get()
+	if err != nil {
+		return nil, err
+	}
+	return dat.Comment, nil
 }
