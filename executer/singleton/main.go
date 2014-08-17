@@ -21,7 +21,9 @@
 package singleton
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -29,6 +31,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fangli/gomsgfiber/logging"
@@ -41,12 +44,22 @@ type SingletonProcessor struct {
 	Retries      int
 	RetryDelay   time.Duration
 	Command      string
+	UploadOutput bool
 	MsgChann     chan []byte
 	Logger       *logging.Log
 	Recorder     *recorder.Record
 	ReportUrl    string
 	InstanceName string
 	InstanceId   string
+}
+
+func parseBody(body []byte) (*recorder.Msgbody, error) {
+	msgbody := recorder.Msgbody{}
+	err := json.Unmarshal(body, &msgbody)
+	if err != nil {
+		return nil, err
+	}
+	return &msgbody, nil
 }
 
 func createTmpFile(prefix string, data []byte) (string, error) {
@@ -59,6 +72,7 @@ func createTmpFile(prefix string, data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	f.Chmod(0777)
 	return f.Name(), nil
 }
 
@@ -66,21 +80,138 @@ func removeTmpFile(fname string) {
 	os.Remove(fname)
 }
 
-func (s *SingletonProcessor) ExecuteCommand(msg []byte) ([]byte, error) {
-	fname, err := createTmpFile(s.ChnName, msg)
+func (s *SingletonProcessor) postRequest(msg string, releaseId string) {
+	if s.UploadOutput == false {
+		return
+	}
+	data := url.Values{}
+	data.Set("action", "output")
+	data.Add("release_id", releaseId)
+	data.Add("msg", msg)
+
+	transport := &httpclient.Transport{
+		ConnectTimeout:        5 * time.Second,
+		RequestTimeout:        5 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
+	}
+	defer transport.Close()
+
+	client := &http.Client{Transport: transport}
+	req, _ := http.NewRequest("POST", s.ReportUrl, bytes.NewBufferString(data.Encode()))
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+}
+
+func (s *SingletonProcessor) postOutput(releaseId string, outputChn *chan string, outputWg *sync.WaitGroup) {
+	payload := ""
+	postTs := time.Now()
+
+	for {
+		select {
+		case msg := <-*outputChn:
+			if msg == "----EOF----" {
+				if payload != "" {
+					s.postRequest(payload, releaseId)
+					close(*outputChn)
+					outputWg.Done()
+					return
+				}
+			}
+
+			payload = payload + msg + "\n"
+			if time.Since(postTs) > time.Duration(time.Second) {
+				s.postRequest(payload, releaseId)
+				payload = ""
+				postTs = time.Now()
+			}
+
+		case <-time.After(time.Second):
+			if payload != "" {
+				s.postRequest(payload, releaseId)
+				payload = ""
+				postTs = time.Now()
+			}
+		}
+	}
+}
+
+func (s *SingletonProcessor) ExecuteCommand(rec *recorder.Msgbody) error {
+	var err error
+	var execErr error
+
+	fname, err := createTmpFile(s.ChnName, []byte(rec.ScriptContent))
 	if err != nil {
 		s.Logger.Fatal("Unable creating temp file to run command: " + err.Error())
 	}
-	command := strings.Replace(s.Command, "%channel%", s.ChnName, -1)
-	command = strings.Replace(command, "%file%", fname, -1)
-	command = strings.Replace(command, "%content%", string(msg), -1)
+	defer removeTmpFile(fname)
 
-	var execErr error
-	var out []byte
+	command := strings.Replace(s.Command, "%releaseid%", strconv.FormatInt(rec.Id, 10), -1)
+	command = strings.Replace(command, "%channel%", s.ChnName, -1)
+	command = strings.Replace(command, "%meta%", rec.Meta, -1)
+	command = strings.Replace(command, "%scriptpath%", fname, -1)
+	command = strings.Replace(command, "%comment%", rec.Comment, -1)
+	command = strings.Replace(command, "%content%", rec.ScriptContent, -1)
+
 	for i := 1; i <= s.Retries+1; i++ {
+
+		var scannerWg sync.WaitGroup
+		var outputWg sync.WaitGroup
+		outputChn := make(chan string, 10000)
+		scannerWg.Add(2)
+		outputWg.Add(1)
+
 		s.Logger.Info("Executing #" + strconv.Itoa(i))
-		out, execErr = exec.Command("sh", "-c", command).CombinedOutput()
-		s.Logger.Info("Output: " + string(out))
+
+		cmd := exec.Command("sh", "-c", command)
+
+		cmd.Dir = "/tmp"
+
+		cmd.Env = make([]string, len(rec.Env))
+		for k, v := range rec.Env {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+
+		stderr, _ := cmd.StderrPipe()
+		stdout, _ := cmd.StdoutPipe()
+		go func() {
+			stderrScanner := bufio.NewScanner(stderr)
+			for stderrScanner.Scan() {
+				outputChn <- stderrScanner.Text()
+			}
+			scannerWg.Done()
+		}()
+		go func() {
+			stdoutScanner := bufio.NewScanner(stdout)
+			for stdoutScanner.Scan() {
+				outputChn <- stdoutScanner.Text()
+			}
+			scannerWg.Done()
+		}()
+
+		go s.postOutput(strconv.FormatInt(rec.Id, 10), &outputChn, &outputWg)
+		execErr = cmd.Start()
+
+		if execErr != nil {
+			if i < s.Retries+1 {
+				s.Logger.Warning("Failed to start command, will retry after " + s.RetryDelay.String())
+				time.Sleep(s.RetryDelay)
+			} else {
+				s.Logger.Error("All retries failed at last, aborted!")
+			}
+			continue
+		}
+
+		execErr = cmd.Wait()
+		scannerWg.Wait()
+
+		outputChn <- "----EOF----"
+		outputWg.Wait()
+
 		if execErr != nil {
 			if i < s.Retries+1 {
 				s.Logger.Warning("Failed to execute command, will retry after " + s.RetryDelay.String())
@@ -88,13 +219,14 @@ func (s *SingletonProcessor) ExecuteCommand(msg []byte) ([]byte, error) {
 			} else {
 				s.Logger.Error("All retries failed at last, aborted!")
 			}
+			continue
 		} else {
 			break
 		}
-	}
-	removeTmpFile(fname)
 
-	return out, execErr
+	}
+
+	return execErr
 }
 
 func (s *SingletonProcessor) fetchInfo() {
@@ -116,7 +248,10 @@ func (s *SingletonProcessor) fetchInfo() {
 	req, _ := http.NewRequest("POST", s.ReportUrl, bytes.NewBufferString(data.Encode()))
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
-	resp, _ := client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
 	defer resp.Body.Close()
 }
 
@@ -128,13 +263,19 @@ func (s *SingletonProcessor) heartbeat() {
 }
 
 func (s *SingletonProcessor) Run() {
-	var err error
 	go s.heartbeat()
 
 	for body := range s.MsgChann {
+
+		record, err := recorder.ParseBody(body)
+		if err != nil {
+			s.Logger.Error("Unrecognized Message Received(" + err.Error() + "): " + string(body))
+			continue
+		}
+
 		if !s.Recorder.Equal(body) {
 			s.Logger.Info("Received new command from server, creating subtask...")
-			_, err = s.ExecuteCommand(body)
+			err = s.ExecuteCommand(record)
 			if err != nil {
 				s.Logger.Error("An error occured when running command. " + err.Error())
 			} else {

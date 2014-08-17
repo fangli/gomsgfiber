@@ -45,6 +45,7 @@ func Run(config *parsecfg.Config, msgChann *chan Msg) {
 			ChnName:      chnName,
 			Retries:      chnConfig.Retry_Times,
 			RetryDelay:   chnConfig.Retry_Delay,
+			UploadOutput: chnConfig.Upload_Output,
 			Command:      chnConfig.Command,
 			MsgChann:     make(chan []byte, config.Main.Queue_Size),
 			ReportUrl:    config.Main.Report_Url,

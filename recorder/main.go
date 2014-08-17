@@ -34,11 +34,11 @@ type Record struct {
 
 type Msgbody struct {
 	Id            int64             `json:"id"`
-	Timestamp     int64             `json:"timestamp"`
-	ScriptContent []byte            `json:"script_content"`
+	Timestamp     float64           `json:"timestamp"`
+	ScriptContent string            `json:"script_content"`
 	Env           map[string]string `json:"env"`
-	Meta          []byte            `json:"meta"`
-	Comment       []byte            `json:"comment"`
+	Meta          string            `json:"meta"`
+	Comment       string            `json:"comment"`
 }
 
 func (r *Record) GetRaw() []byte {
@@ -85,7 +85,7 @@ func (r *Record) GetReleaseId() int64 {
 	return dat.Id
 }
 
-func (r *Record) GetTimestamp() (int64, error) {
+func (r *Record) GetTimestamp() (float64, error) {
 	dat, err := r.Get()
 	if err != nil {
 		return 0, err
@@ -93,10 +93,10 @@ func (r *Record) GetTimestamp() (int64, error) {
 	return dat.Timestamp, nil
 }
 
-func (r *Record) GetScriptContent() ([]byte, error) {
+func (r *Record) GetScriptContent() (string, error) {
 	dat, err := r.Get()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	return dat.ScriptContent, nil
 }
@@ -109,18 +109,27 @@ func (r *Record) GetEnv() (map[string]string, error) {
 	return dat.Env, nil
 }
 
-func (r *Record) GetMeta() ([]byte, error) {
+func (r *Record) GetMeta() (string, error) {
 	dat, err := r.Get()
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	return dat.Meta, nil
 }
 
-func (r *Record) GetComment() ([]byte, error) {
+func (r *Record) GetComment() (string, error) {
 	dat, err := r.Get()
+	if err != nil {
+		return "", err
+	}
+	return dat.Comment, nil
+}
+
+func ParseBody(body []byte) (*Msgbody, error) {
+	var dat Msgbody
+	err := json.Unmarshal(body, &dat)
 	if err != nil {
 		return nil, err
 	}
-	return dat.Comment, nil
+	return &dat, nil
 }

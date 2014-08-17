@@ -42,6 +42,7 @@ var SYS_BUILD_DATE string
 type ChannelStruct struct {
 	Command         string
 	Retry_Times     int
+	Upload_Output   bool          `gcfg:"upload-output"`
 	Raw_Retry_Delay string        `gcfg:"retry-delay"`
 	Retry_Delay     time.Duration `gcfg:"raw-retry-delay"`
 }
@@ -158,6 +159,7 @@ func getChannels(flist []string) *map[string]*ChannelStruct {
 			ret[name] = &ChannelStruct{}
 			ret[name].Command = chann.Command
 			ret[name].Retry_Times = chann.Retry_Times
+			ret[name].Upload_Output = chann.Upload_Output
 
 			if chann.Raw_Retry_Delay == "" {
 				ret[name].Retry_Delay = time.Duration(0)
