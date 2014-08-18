@@ -76,7 +76,8 @@ type Config struct {
 		Channels     map[string]*ChannelStruct
 		Channel_List []string
 	}
-	AppLog *logging.Log
+	AppLog  *logging.Log
+	PidFile string
 }
 
 func mkdirs(path string) error {
@@ -111,23 +112,23 @@ func initialDataDir(datadir string) error {
 }
 
 func showVersion() {
-	fmt.Println("Msgclient: A client of msgfiber")
+	fmt.Println("Msgclient: A decentralized and distributed message synchronization system")
 	fmt.Println("Version", SYS_VER)
 	fmt.Println("Build", SYS_BUILD_VER)
 	fmt.Println("Compile at", SYS_BUILD_DATE)
 	os.Exit(0)
 }
 
-func getConfigPath() string {
+func getConfigPath() (string, string) {
 	configPath := flag.String("config", "/etc/msgclient/msgclient.conf", "The primary configuration file")
-	version := flag.Bool("version", false, "Show version information")
+	pidfile := flag.String("pid", "/var/run/msgclient.pid", "The PID file of msgclient")
 	v := flag.Bool("v", false, "Show version information")
 	flag.Parse()
 
-	if *version || *v {
+	if *v {
 		showVersion()
 	}
-	return *configPath
+	return *configPath, *pidfile
 }
 
 func initialDefault() *Config {
@@ -179,7 +180,7 @@ func getChannels(flist []string) *map[string]*ChannelStruct {
 
 func Parse() *Config {
 
-	configPath := getConfigPath()
+	configPath, pidfile := getConfigPath()
 
 	config := initialDefault()
 	err := gcfg.ReadFileInto(config, configPath)
@@ -223,6 +224,8 @@ func Parse() *Config {
 		Level:    config.Main.Log_Level,
 		FileName: config.Main.Data_Path + "/application.log",
 	}
+
+	config.PidFile = pidfile
 
 	return config
 }

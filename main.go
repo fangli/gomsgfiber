@@ -21,17 +21,56 @@
 package main
 
 import (
+	"io/ioutil"
+	"log"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+
 	"github.com/fangli/gomsgfiber/parsecfg"
 	"github.com/fangli/gomsgfiber/processor"
 )
 
-// Main
+// Application framework
+func WritePid(pidfile string) {
+	err := ioutil.WriteFile(pidfile, []byte(strconv.Itoa(os.Getpid())), 0666)
+	if err != nil {
+		log.Fatalln("Error writing PID file: " + err.Error())
+	}
+}
 
+func RemovePid(pidfile string) {
+	err := os.Remove(pidfile)
+	if err != nil {
+		log.Println("System exit but unable to delete PID file: " + err.Error())
+	}
+}
+
+func signalStopListener(config *parsecfg.Config, signalChn chan os.Signal) {
+	<-signalChn
+	RemovePid(config.PidFile)
+	config.AppLog.Info("Shutdown signal received, msgclient stopped")
+	os.Exit(0)
+}
+
+func signalProcessor(config *parsecfg.Config) {
+	WritePid(config.PidFile)
+	config.AppLog.Info("System started with PID " + strconv.Itoa(os.Getpid()) + "...")
+	signalChannel := make(chan os.Signal)
+	signal.Notify(signalChannel,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT,
+	)
+	go signalStopListener(config, signalChannel)
+}
+
+// Main
 func main() {
 	config := parsecfg.Parse()
-	p := processor.Processor{
-		Config: config,
-	}
+	signalProcessor(config)
+	p := processor.Processor{Config: config}
 	p.Init()
 	p.Forever()
 }
