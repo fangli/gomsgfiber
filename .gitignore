@@ -26,5 +26,6 @@ msgfiber
 main
 *.sublime-project
 *.sublime-workspace
-
+rpm/msgclient
+rpm/msgclient-manager
 *.exe
