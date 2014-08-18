@@ -39,6 +39,9 @@ rm -rf dist/osx_i386/msgclient
 rm -rf dist/windows_x64/msgclient.exe
 rm -rf dist/windows_i386/msgclient.exe
 
+rm -rf rpm/msgclient
+rm -rf rpm/msgclient-manager
+
 echo "Compiling linux/i386"
 export GOOS=linux
 export GOARCH=386
@@ -74,3 +77,11 @@ export GOOS=windows
 export GOARCH=amd64
 go build -o "dist/windows_x64/msgclient.exe" -ldflags "-X github.com/fangli/gomsgfiber/parsecfg.SYS_BUILD_DATE '$date' -X github.com/fangli/gomsgfiber/parsecfg.SYS_VER '$version' -X github.com/fangli/gomsgfiber/parsecfg.SYS_BUILD_VER '$git_ver'" main.go
 ls -la dist/windows_x64/msgclient.exe
+
+cp dist/linux_x64/msgclient rpm/
+
+echo "Compiling manager for linux/amd64"
+export GOOS=linux
+export GOARCH=amd64
+go build -o "rpm/msgclient-manager" manager/manager.go
+

@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+# msgclient   This scripts turns msgclient on
+#
+# Author:       Fang Li <fang.li@funplus.com>
+#
+# chkconfig:    - 99 01
+#
+# description:  A decentralized and distributed message synchronization system
+# processname:  msgclient
+# config: /etc/msgclient/msgclient.conf
+# pidfile: /var/run/msgclient.pid
+#
+
+# source function library
+. /etc/rc.d/init.d/functions
+
+RETVAL=0
+
+start() {
+        echo -n $"Starting msgclient: "
+        daemon --pidfile=/var/run/msgclient.pid msgclient-manager -c /etc/msgclient/msgclient.conf
+        RETVAL=$?
+        echo
+        [ $RETVAL -eq 0 ] && touch /var/lock/subsys/msgclient
+}
+
+stop() {
+        echo -n $"Stopping msgclient: "
+        killproc -d 30 msgclient
+        RETVAL=$?
+        echo
+        [ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/msgclient
+}
+
+restart() {
+        stop
+        start
+}
+
+reload() {
+        stop
+        start
+}
+
+case "$1" in
+  start)
+        start
+        ;;
+  stop) 
+        stop
+        ;;
+  reload) 
+        reload
+        ;;
+  restart)
+        restart
+        ;;
+  condrestart)
+        [ -f /var/lock/subsys/msgclient ] && restart
+        ;;
+  status)
+        status msgclient
+        RETVAL=$?
+        ;;
+  *)
+        echo $"Usage: $0 {start|stop|status|restart|reload|condrestart}"
+        exit 1
+esac
+
+exit $RETVAL

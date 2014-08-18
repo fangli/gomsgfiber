@@ -52,6 +52,9 @@ type ChannelsMap struct {
 }
 
 type Config struct {
+	Manager struct {
+		Command string
+	}
 	Main struct {
 		Data_Path     string
 		Queue_Size    int64
