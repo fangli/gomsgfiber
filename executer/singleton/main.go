@@ -206,8 +206,8 @@ func (s *SingletonProcessor) ExecuteCommand(rec *recorder.Msgbody) error {
 			continue
 		}
 
-		execErr = cmd.Wait()
 		scannerWg.Wait()
+		execErr = cmd.Wait()
 
 		outputChn <- "----EOF----"
 		outputWg.Wait()
