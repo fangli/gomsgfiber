@@ -1,6 +1,6 @@
 Name:   msgclient
 Summary:        A decentralized and distributed message synchronization system
-Version:        1.0.1
+Version:        1.0.2
 Release:        el6
 
 Group:          Applications/Server
@@ -59,6 +59,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Tue Aug 19 2014  Fang.li <fang.li@funplus.com>
+  - fixed incomplete execution bug
+
 * Mon Aug 18 2014  Fang.li <fang.li@funplus.com>
   - fixed CentOS 5 compatiable bugs
   - Initial release
