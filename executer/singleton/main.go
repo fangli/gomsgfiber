@@ -117,10 +117,10 @@ func (s *SingletonProcessor) postOutput(releaseId string, outputChn *chan string
 			if msg == "----EOF----" {
 				if payload != "" {
 					s.postRequest(payload, releaseId)
-					close(*outputChn)
-					outputWg.Done()
-					return
 				}
+				close(*outputChn)
+				outputWg.Done()
+				return
 			}
 
 			payload = payload + msg + "\n"
