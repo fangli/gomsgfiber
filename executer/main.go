@@ -21,6 +21,8 @@
 package executer
 
 import (
+	"os"
+
 	"github.com/fangli/gomsgfiber/executer/singleton"
 	"github.com/fangli/gomsgfiber/logging"
 	"github.com/fangli/gomsgfiber/parsecfg"
@@ -32,7 +34,7 @@ type Msg struct {
 	Message []byte
 }
 
-func Run(config *parsecfg.Config, msgChann *chan Msg) {
+func RunForever(config *parsecfg.Config, msgChann *chan Msg) {
 	var msg Msg
 	// Make a cache query instance
 
@@ -40,7 +42,6 @@ func Run(config *parsecfg.Config, msgChann *chan Msg) {
 	pool := make(map[string]*singleton.SingletonProcessor)
 
 	for chnName, chnConfig := range config.Channel.Channels {
-
 		pool[chnName] = &singleton.SingletonProcessor{
 			ChnName:      chnName,
 			Retries:      chnConfig.Retry_Times,
@@ -58,11 +59,74 @@ func Run(config *parsecfg.Config, msgChann *chan Msg) {
 				FileName: config.Main.Data_Path + "/logs/" + chnName + ".log",
 			},
 		}
-
 		go pool[chnName].Run()
 	}
 
 	for msg = range *msgChann {
 		pool[msg.Channel].MsgChann <- msg.Message
+	}
+}
+
+func RunOnce(config *parsecfg.Config, msgChann *chan Msg) {
+	var msg Msg
+	// Make a cache query instance
+
+	// Pool contains different message channel
+	pool := make(map[string]*singleton.SingletonProcessor)
+
+	for chnName, chnConfig := range config.Channel.Channels {
+		pool[chnName] = &singleton.SingletonProcessor{
+			ChnName:      chnName,
+			Retries:      chnConfig.Retry_Times,
+			RetryDelay:   chnConfig.Retry_Delay,
+			UploadOutput: chnConfig.Upload_Output,
+			Command:      chnConfig.Command,
+			MsgChann:     make(chan []byte, config.Main.Queue_Size),
+			ReportUrl:    config.Main.Report_Url,
+			InstanceName: config.Client.Name,
+			InstanceId:   config.Client.Instance_Id,
+			Recorder:     &recorder.Record{config.Main.Data_Path + "/.caches/" + chnName},
+			Logger: &logging.Log{
+				Dest:     1,
+				Level:    config.Main.Log_Level,
+				FileName: config.Main.Data_Path + "/logs/" + chnName + ".log",
+			},
+		}
+	}
+
+	go func() {
+		for msg = range *msgChann {
+			pool[msg.Channel].MsgChann <- msg.Message
+		}
+	}()
+
+	outputChan := make(chan error, len(config.Channel.Channels))
+	for chnName, _ := range config.Channel.Channels {
+		go func(cn string) {
+			outputChan <- pool[cn].RunOnce()
+		}(chnName)
+	}
+
+	var err error = nil
+	for _, _ = range config.Channel.Channels {
+		e := <-outputChan
+		if e != nil {
+			err = e
+		}
+	}
+
+	if err == nil {
+		os.Exit(0)
+	} else {
+		os.Exit(1)
+	}
+
+}
+
+func Run(config *parsecfg.Config, msgChann *chan Msg) {
+	if config.IsInitial == true {
+		RunOnce(config, msgChann)
+	} else {
+		RunForever(config, msgChann)
 	}
 }

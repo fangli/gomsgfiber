@@ -262,11 +262,38 @@ func (s *SingletonProcessor) heartbeat() {
 	}
 }
 
+func (s *SingletonProcessor) RunOnce() error {
+	go s.heartbeat()
+	body := <-s.MsgChann
+	if len(body) == 0 {
+		return nil
+	}
+	record, err := recorder.ParseBody(body)
+	if err != nil {
+		s.Logger.Error("Unrecognized Message Received(" + err.Error() + "): " + string(body))
+		return err
+	}
+
+	if !s.Recorder.Equal(body) {
+		s.Logger.Info("Received new command from server, creating subtask...")
+		err = s.ExecuteCommand(record)
+		if err != nil {
+			s.Logger.Error("An error occured when running command, aborted: " + err.Error())
+			return err
+		}
+		s.Logger.Info("Command finished and exit")
+		s.Recorder.Set(body)
+	}
+	return nil
+}
+
 func (s *SingletonProcessor) Run() {
 	go s.heartbeat()
 
 	for body := range s.MsgChann {
-
+		if len(body) == 0 {
+			continue
+		}
 		record, err := recorder.ParseBody(body)
 		if err != nil {
 			s.Logger.Error("Unrecognized Message Received(" + err.Error() + "): " + string(body))
@@ -277,11 +304,11 @@ func (s *SingletonProcessor) Run() {
 			s.Logger.Info("Received new command from server, creating subtask...")
 			err = s.ExecuteCommand(record)
 			if err != nil {
-				s.Logger.Error("An error occured when running command. " + err.Error())
+				s.Logger.Error("An error occured when running command,aborted: " + err.Error())
 			} else {
 				s.Logger.Info("Command finished and exit")
+				s.Recorder.Set(body)
 			}
-			s.Recorder.Set(body)
 		}
 	}
 }

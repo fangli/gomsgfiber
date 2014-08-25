@@ -85,11 +85,9 @@ func (m *Manager) Receiver(msgChan *chan executer.Msg) error {
 			}
 		} else if raw["Op"] == "subscribe" {
 			for k, v := range raw["Channel"].(map[interface{}]interface{}) {
-				if v.(string) != "" {
-					*msgChan <- executer.Msg{
-						Channel: k.(string),
-						Message: []byte(v.(string)),
-					}
+				*msgChan <- executer.Msg{
+					Channel: k.(string),
+					Message: []byte(v.(string)),
 				}
 			}
 		}
