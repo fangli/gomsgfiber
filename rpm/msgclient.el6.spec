@@ -1,12 +1,12 @@
 Name:   msgclient
 Summary:        A decentralized and distributed message synchronization system
-Version:        1.0.2
+Version:        1.0.3
 Release:        el6
 
 Group:          Applications/Server
 License:        GPLv2
 URL:            https://github.com/fangli/gomsgfiber
-Source0:        https://github.com/fangli/gomsgfiber/releases/download/1.0.1/msgclient.tar.gz
+Source0:        https://github.com/fangli/gomsgfiber/releases/download/1.0.3/msgclient.tar.gz
 BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %define debug_package %{nil}
@@ -59,6 +59,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Mon Aug 25 2014  Fang.li <fang.li@funplus.com>
+  - Add initial-run feature
+
 * Tue Aug 19 2014  Fang.li <fang.li@funplus.com>
   - fixed incomplete execution bug
 
