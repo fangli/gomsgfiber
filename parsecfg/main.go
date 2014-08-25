@@ -76,8 +76,9 @@ type Config struct {
 		Channels     map[string]*ChannelStruct
 		Channel_List []string
 	}
-	AppLog  *logging.Log
-	PidFile string
+	AppLog    *logging.Log
+	PidFile   string
+	IsInitial bool
 }
 
 func mkdirs(path string) error {
@@ -119,16 +120,17 @@ func showVersion() {
 	os.Exit(0)
 }
 
-func getConfigPath() (string, string) {
+func getConfigPath() (string, string, bool) {
 	configPath := flag.String("config", "/etc/msgclient/msgclient.conf", "The primary configuration file")
 	pidfile := flag.String("pid", "/var/run/msgclient.pid", "The PID file of msgclient")
+	initial := flag.Bool("initial", false, "Initialize all scripts and exit. Usually used in the first run")
 	v := flag.Bool("v", false, "Show version information")
 	flag.Parse()
 
 	if *v {
 		showVersion()
 	}
-	return *configPath, *pidfile
+	return *configPath, *pidfile, *initial
 }
 
 func initialDefault() *Config {
@@ -180,7 +182,7 @@ func getChannels(flist []string) *map[string]*ChannelStruct {
 
 func Parse() *Config {
 
-	configPath, pidfile := getConfigPath()
+	configPath, pidfile, initial := getConfigPath()
 
 	config := initialDefault()
 	err := gcfg.ReadFileInto(config, configPath)
@@ -226,6 +228,7 @@ func Parse() *Config {
 	}
 
 	config.PidFile = pidfile
+	config.IsInitial = initial
 
 	return config
 }
