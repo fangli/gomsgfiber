@@ -1,6 +1,6 @@
 Name:   msgclient
 Summary:        A decentralized and distributed message synchronization system
-Version:        1.0.3
+Version:        1.0.5
 Release:        el5
 
 Group:          Applications/Server

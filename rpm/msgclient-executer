@@ -1,0 +1,86 @@
+#!/usr/bin/env python
+# -*- coding:utf-8 -*-
+
+#*********************************************************#
+# @@ScriptName: msgclient-executer
+# @@Author: Felix Lee <fang.li@funplus.com>
+# @@Create Date: 04/15/2013
+# @@Modify Date: 2014-08-26 15:40:10
+# @@Function: Execute Scripts and report status
+#*********************************************************#
+
+__author__ = "Fang Li <fang.li@funplus.com>"
+__version__ = (0, 1)
+
+
+import urllib2
+import time
+import sys
+import threading
+import subprocess
+
+_META = ""
+
+def postStatus(url, status):
+    global _META
+    url = url.replace("%status%", status)
+    isOk = False
+    for _ in xrange(3):
+        try:
+            urllib2.urlopen(url, _META)
+            isOk = True
+            break
+        except:
+            time.sleep(3)
+    return isOk
+
+def outputThread(pipe):
+    global _META
+    t0 = time.time()
+    for ln in iter(pipe.readline, ''):
+        ln = ln.strip()
+        sys.stdout.write(str(round(time.time()-t0, 3)) + "\t " + ln + "\n")
+        sys.stdout.flush()
+        if ln.startswith("META="):
+            _META = ln[5:]
+
+def run(
+    script_name,
+    timeout=600,
+    cwd='/tmp/',
+):
+    exec_proc = subprocess.Popen(
+        args=script_name,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    threading.Thread(target=outputThread, args=(exec_proc.stdout, ), name='thread-output').start()
+    time_left = timeout
+    while time_left > 0:
+        time.sleep(1)
+        retcode = exec_proc.poll()
+        if retcode is None:
+            time_left -= 1
+        else:
+            break
+
+    if retcode == 0:
+        return "ok"
+    elif retcode is None:
+        exec_proc.kill()
+        print "Script run out of time, killed forcefully"
+        return "error"
+    else:
+        return "error"
+
+
+if __name__ == "__main__":
+    script_name = sys.argv[1]
+    report_url = sys.argv[2]
+    timeout = int(sys.argv[3])
+    if postStatus(report_url, run(script_name, timeout)):
+        sys.exit(0)
+    else:
+        sys.exit(1)
