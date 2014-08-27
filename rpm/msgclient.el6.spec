@@ -23,6 +23,7 @@ A decentralized and distributed message synchronization system
 install -d %{buildroot}%{_bindir}
 mv msgclient %{buildroot}%{_bindir}/
 mv msgclient-manager %{buildroot}%{_bindir}/
+mv msgclient-executer %{buildroot}%{_bindir}/
 install -d %{buildroot}%{_initddir}
 mv etc/init.d/msgclient %{buildroot}%{_initddir}/
 install -d %{buildroot}%{_sysconfdir}
